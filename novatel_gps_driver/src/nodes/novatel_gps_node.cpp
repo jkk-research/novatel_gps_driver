@@ -37,6 +37,11 @@
 
 #include <ctime>
 
+#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include "tf2/LinearMath/Quaternion.h"
+#include "tf2_ros/transform_broadcaster.h"
+
 namespace stats = boost::accumulators;
 using TimeParserMsgT = novatel_gps_driver::TimeParser::MessageType;
 
@@ -123,6 +128,14 @@ namespace novatel_gps_driver
     reconnect_delay_s_ = this->declare_parameter("reconnect_delay_s", reconnect_delay_s_);
     use_binary_messages_ = this->declare_parameter("use_binary_messages", use_binary_messages_);
     span_frame_to_ros_frame_ = this->declare_parameter("span_frame_to_ros_frame", span_frame_to_ros_frame_);
+    x_coord_offset = this->declare_parameter("x_coord_offset", x_coord_offset);
+    y_coord_offset = this->declare_parameter("y_coord_offset", y_coord_offset);
+    z_coord_exact_height = this->declare_parameter("z_coord_exact_height", z_coord_exact_height);
+    z_coord_ref_switch = this->declare_parameter("z_coord_ref_switch", z_coord_ref_switch);
+    tf_frame_id  = this->declare_parameter("tf_frame_id", tf_frame_id);
+    tf_child_frame_id = this->declare_parameter("tf_child_frame_id", tf_child_frame_id);
+    utm_frame_id = this->declare_parameter("utm_frame_id", utm_frame_id);
+
 
     connection_type_ = this->declare_parameter("connection_type", connection_type_);
     connection_ = NovatelGps::ParseConnection(connection_type_);
@@ -199,6 +212,8 @@ namespace novatel_gps_driver
     if (publish_novatel_utm_positions_)
     {
       novatel_utm_pub_ = swri::advertise<novatel_gps_msgs::msg::NovatelUtmPosition>(*this, "bestutm", 100);
+      geometry_utm_pub_ = swri::advertise<geometry_msgs::msg::PoseStamped>(*this, "current_pose", 100);
+      tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
     }
 
     if (publish_novatel_velocity_)
@@ -666,8 +681,49 @@ namespace novatel_gps_driver
       gps_.GetNovatelUtmPositions(utm_msgs);
       for (auto& msg : utm_msgs)
       {
+        if (first_run_z_coord)
+        {
+          z_coord_start = msg->height;
+          first_run_z_coord = false;
+        }
         msg->header.stamp = rclcpp::Time(msg->header.stamp, this->get_clock()->get_clock_type()) + sync_offset;
-        msg->header.frame_id = frame_id_;
+        msg->header.frame_id = utm_frame_id;
+        utmpose.header = msg->header;
+        utmpose.pose.position.x = msg->easting + x_coord_offset;
+        utmpose.pose.position.y = msg->northing + y_coord_offset;
+        // z_coord_ref_switch can be zero / zero_based / orig
+        if (z_coord_ref_switch.compare("zero") == 0)
+        {
+          utmpose.pose.position.z = 0;
+        }
+        else if (z_coord_ref_switch.compare("exact") == 0)
+        {
+          utmpose.pose.position.z = z_coord_exact_height;
+        }
+        else if (z_coord_ref_switch.compare("zero_based") == 0)
+        {
+          utmpose.pose.position.z = msg->height - z_coord_start;
+          
+        }
+        else if (z_coord_ref_switch.compare("orig") == 0)
+        {
+          utmpose.pose.position.z = msg->height;
+        }
+
+
+
+        utmtransform.header.stamp = msg->header.stamp;
+        utmtransform.header.frame_id = tf_frame_id;
+        utmtransform.child_frame_id = tf_child_frame_id;
+        utmtransform.transform.translation.x = utmpose.pose.position.x; 
+        utmtransform.transform.translation.y = utmpose.pose.position.y; 
+        utmtransform.transform.translation.z = utmpose.pose.position.z; 
+        utmtransform.transform.rotation.x = utmpose.pose.orientation.x;
+        utmtransform.transform.rotation.y = utmpose.pose.orientation.y;
+        utmtransform.transform.rotation.z = utmpose.pose.orientation.z;
+        utmtransform.transform.rotation.w = utmpose.pose.orientation.w;
+        tf_broadcaster_->sendTransform(utmtransform);
+        geometry_utm_pub_->publish(utmpose);
         novatel_utm_pub_->publish(std::move(msg));
       }
     }
@@ -812,6 +868,19 @@ namespace novatel_gps_driver
       {
         msg->header.stamp = rclcpp::Time(msg->header.stamp, this->get_clock()->get_clock_type()) + sync_offset;
         msg->header.frame_id = imu_frame_id_;
+        // RCLCPP_INFO(this->get_logger(), "INS PVA: %f %f %f", msg->roll, msg->pitch, msg->azimuth);
+        tf2::Quaternion oriQuater, oriRot, oriNew;
+        double R = (msg->roll) * (M_PI / 180)  * -1;
+        double P = (msg->pitch) * (M_PI / 180) * -1;
+        double Y = (msg->azimuth) * (M_PI / 180) - M_PI;
+        oriQuater.setRPY(R,P,Y); 
+        oriRot.setRPY(0.0, 0.0, M_PI);
+        oriNew = oriRot * oriQuater;
+        oriNew.normalize();
+        utmpose.pose.orientation.w = oriNew.getW() * -1;
+        utmpose.pose.orientation.x = oriNew.getY();
+        utmpose.pose.orientation.y = oriNew.getX() * -1;
+        utmpose.pose.orientation.z = oriNew.getZ();
         inspva_pub_->publish(*msg);
       }
 

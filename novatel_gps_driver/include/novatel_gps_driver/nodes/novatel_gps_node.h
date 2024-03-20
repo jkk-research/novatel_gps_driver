@@ -160,6 +160,9 @@
 
 #include <sensor_msgs/msg/nav_sat_fix.hpp>
 #include <sensor_msgs/msg/time_reference.hpp>
+#include <geometry_msgs/msg/pose_stamped.hpp>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+#include "tf2_ros/transform_broadcaster.h"
 
 #include <swri_roscpp/subscriber.h>
 
@@ -223,6 +226,19 @@ namespace novatel_gps_driver
     bool publish_invalid_gpsfix_;
     double reconnect_delay_s_;
     bool use_binary_messages_;
+    double x_coord_offset;
+    double y_coord_offset;
+    double z_coord_exact_height;
+    std::string z_coord_ref_switch;
+    std::string tf_frame_id;
+    std::string tf_child_frame_id;
+    std::string utm_frame_id;
+  bool first_run_imu_conf = true;
+  bool first_run_z_coord = true;
+  bool first_run_position = true;
+  bool first_run_tf_static = true;
+  bool first_run_orientation = true;
+  double z_coord_start = 0.0;
 
     rclcpp::Publisher<novatel_gps_msgs::msg::ClockSteering>::SharedPtr clocksteering_pub_;
     rclcpp::Publisher<sensor_msgs::msg::NavSatFix>::SharedPtr fix_pub_;
@@ -236,6 +252,8 @@ namespace novatel_gps_driver
     rclcpp::Publisher<novatel_gps_msgs::msg::NovatelPosition>::SharedPtr novatel_position_pub_;
     rclcpp::Publisher<novatel_gps_msgs::msg::NovatelXYZ>::SharedPtr novatel_xyz_position_pub_;
     rclcpp::Publisher<novatel_gps_msgs::msg::NovatelUtmPosition>::SharedPtr novatel_utm_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr geometry_utm_pub_;
+    std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     rclcpp::Publisher<novatel_gps_msgs::msg::NovatelVelocity>::SharedPtr novatel_velocity_pub_;
     rclcpp::Publisher<novatel_gps_msgs::msg::NovatelHeading2>::SharedPtr novatel_heading2_pub_;
     rclcpp::Publisher<novatel_gps_msgs::msg::NovatelDualAntennaHeading>::SharedPtr novatel_dual_antenna_heading_pub_;
@@ -251,6 +269,10 @@ namespace novatel_gps_driver
     rclcpp::Publisher<novatel_gps_msgs::msg::Trackstat>::SharedPtr trackstat_pub_;
 
     rclcpp::Service<novatel_gps_msgs::srv::NovatelFRESET>::SharedPtr reset_service_;
+
+    geometry_msgs::msg::PoseStamped utmpose;
+    geometry_msgs::msg::TransformStamped utmtransform;
+
 
     NovatelGps::ConnectionType connection_;
     NovatelGps gps_;
