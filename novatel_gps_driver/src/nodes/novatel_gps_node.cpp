@@ -874,7 +874,7 @@ namespace novatel_gps_driver
         double P = (msg->pitch) * (M_PI / 180) * -1;
         double Y = (msg->azimuth) * (M_PI / 180) - M_PI;
         oriQuater.setRPY(R,P,Y); 
-        oriRot.setRPY(0.0, 0.0, M_PI);
+        oriRot.setRPY(0.0, 0.0, M_PI/2);
         oriNew = oriRot * oriQuater;
         oriNew.normalize();
         utmpose.pose.orientation.w = oriNew.getW() * -1;
