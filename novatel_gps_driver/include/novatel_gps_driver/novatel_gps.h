@@ -436,7 +436,7 @@ namespace novatel_gps_driver
 
       static constexpr uint16_t DEFAULT_TCP_PORT = 3001;
       static constexpr uint16_t DEFAULT_UDP_PORT = 3002;
-      static constexpr size_t MAX_BUFFER_SIZE = 100;
+      static constexpr size_t MAX_BUFFER_SIZE = 200;
       static constexpr size_t SYNC_BUFFER_SIZE = 10;
       static constexpr uint32_t SECONDS_PER_WEEK = 604800;
       static constexpr double IMU_TOLERANCE_S = 0.0002;
